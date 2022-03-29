@@ -1,11 +1,13 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import Category,Brand,Color, ProductAttribute,Size,Product,Banner,CustomUser
+from .models import Category,Brand,Color, ProductAttribute,Size,Product,Banner,CartOrder,CartOrderItems,ProductReview,Wishlist,UserAddressBook
+from .models import CustomUser
 from .forms import SignupForm
 # Register your models here.
 
 admin.site.register(Brand)
 admin.site.register(Size)
+admin.site.register(Wishlist)
 
 
 class BannerAdmin(admin.ModelAdmin):
@@ -34,5 +36,29 @@ admin.site.register(ProductAttribute,ProductAttributeAdmin)
 class CustomUserAdmin(UserAdmin):
     add_form = SignupForm
     model = CustomUser
+    list_display = ['username', 'phone_no', 'is_delboy', ]
 
 admin.site.register(CustomUser,CustomUserAdmin)
+
+
+#order
+class CartOrderAdmin(admin.ModelAdmin):
+    list_editable=('paid_status','order_status','order_status')
+    list_display=('user','total_amt','paid_status','order_dt','order_status')
+admin.site.register(CartOrder,CartOrderAdmin)
+
+class CartOrderItemsAdmin(admin.ModelAdmin):
+    list_display=('invoice_no','item','image_tag','qty')
+admin.site.register(CartOrderItems,CartOrderItemsAdmin)
+
+
+#product review
+class ProductReviewAdmin(admin.ModelAdmin):
+    list_display=('user','product','review_text','get_review_rating')
+admin.site.register(ProductReview,ProductReviewAdmin)
+
+
+
+class UserAddressBookAdmin(admin.ModelAdmin):
+	list_display=('user','address','status')
+admin.site.register(UserAddressBook,UserAddressBookAdmin)

@@ -1,7 +1,12 @@
-from django.shortcuts import render
+from django.shortcuts import render,redirect
 from django.http import JsonResponse
-from .models import Banner, Category,Brand, Product, ProductAttribute
+from django.db.models.functions import ExtractMonth
+from .models import Banner, Category,Brand, Product, ProductAttribute, CartOrder,CartOrderItems, ProductReview, Wishlist, UserAddressBook
+from django.db.models import Avg,Count
 from django.template.loader import render_to_string
+from django.contrib.auth import authenticate, login
+from .forms import SignupForm,ReviewAdd,AddressBookForm,ProfileForm
+from django.contrib.auth.decorators import login_required
 # Create your views here.
 
 #Home Page
@@ -55,7 +60,27 @@ def product_detail(request,slug,id):
     related_products=Product.objects.filter(category=product.category).exclude(id=id)[:4]
     colors=ProductAttribute.objects.filter(product=product).values('color__id','color__title','color__color_code').distinct()
     sizes=ProductAttribute.objects.filter(product=product).values('id','size__id','size__title','price','color__id','image').distinct()
-    return render(request,'product_detail.html',{'data':product,'related':related_products,'colors':colors,'sizes':sizes})
+    reviewForm=ReviewAdd()
+
+    #Check
+    if request.user.is_authenticated:
+        canAdd=True
+        reviewCheck=ProductReview.objects.filter(user=request.user,product=product).count()
+        if reviewCheck > 0:
+            canAdd=False
+    else:
+        canAdd=False
+    #EndCheck
+
+    #Fetch reviews
+    reviews=ProductReview.objects.filter(product=product)
+    #EndFetch
+
+    #Fetch avg rating for reviews
+    #avg_reviews=ProductReview.objects.filter(product=product).aggregate(avg_rating=Avg('review_rating'))
+    #end avgrating
+
+    return render(request,'product_detail.html',{'data':product,'related':related_products,'colors':colors,'sizes':sizes,'reviewForm':reviewForm,'canAdd':canAdd,'reviews':reviews,})#'avg_reviews':avg_reviews})
 
 
 #Search
@@ -171,6 +196,195 @@ def update_cart_item(request):
 
 
 
-#Sign up
+# Signup Form
 def signup(request):
-    return
+	if request.method=='POST':
+		form=SignupForm(request.POST)
+		if form.is_valid():
+			form.save()
+			username=form.cleaned_data.get('username')
+			pwd=form.cleaned_data.get('password1')
+			user=authenticate(username=username,password=pwd)
+			login(request, user)
+			return redirect('home')
+	form=SignupForm
+	return render(request, 'registration/signup.html',{'form':form})
+
+
+
+#initial checkout
+@login_required
+def initial_checkout(request):
+    total_amt=0
+    address=UserAddressBook.objects.filter(user=request.user,status=True).first()
+    if 'cartdata' in request.session:
+        for p_id,item in request.session['cartdata'].items():
+            total_amt+=int(item['qty'])*float(item['price'])
+            return render(request,'checkout.html',{'cart_data':request.session['cartdata'],'totalitems':len(request.session['cartdata']),'total_amt':total_amt,'address':address})
+	
+# Checkout
+@login_required
+def checkout(request):
+	total_amt=0
+	totalAmt=0
+	if 'cartdata' in request.session:
+		for p_id,item in request.session['cartdata'].items():
+			totalAmt+=int(item['qty'])*float(item['price'])
+		# Order
+		order=CartOrder.objects.create(
+				user=request.user,
+				total_amt=totalAmt
+			)
+		# End
+		for p_id,item in request.session['cartdata'].items():
+			total_amt+=int(item['qty'])*float(item['price'])
+			# OrderItems
+			items=CartOrderItems.objects.create(
+				order=order,
+				invoice_no='INV-'+str(order.id),
+				item=item['title'],
+				image=item['image'],
+				qty=item['qty'],
+				price=item['price'],
+				total=float(item['qty'])*float(item['price'])
+				)
+			# End
+		
+		address=UserAddressBook.objects.filter(user=request.user,status=True).first()
+		return render(request, 'order-complete.html',{'cart_data':request.session['cartdata'],'totalitems':len(request.session['cartdata']),'total_amt':total_amt,'address':address})
+
+
+
+# Save Review
+def save_review(request,pid):
+	product=Product.objects.get(pk=pid)
+	user=request.user
+	review=ProductReview.objects.create(
+		user=user,
+		product=product,
+		review_text=request.POST['review_text'],
+		review_rating=request.POST['review_rating'],
+		)
+	data={
+		'user':user.username,
+		'review_text':request.POST['review_text'],
+		'review_rating':request.POST['review_rating']
+	}
+
+	# Fetch avg rating for reviews
+	#avg_reviews=ProductReview.objects.filter(product=product).aggregate(avg_rating=Avg('review_rating'))
+	# End
+	return JsonResponse({'bool':True,'data':data})#'avg_reviews':avg_reviews})
+
+
+# User Dashboard
+import calendar
+def my_dashboard(request):
+	orders=CartOrder.objects.annotate(month=ExtractMonth('order_dt')).values('month').annotate(count=Count('id')).values('month','count')
+	monthNumber=[]
+	totalOrders=[]
+	for d in orders:
+		monthNumber.append(calendar.month_name[d['month']])
+		totalOrders.append(d['count'])
+	return render(request, 'user/dashboard.html',{'monthNumber':monthNumber,'totalOrders':totalOrders})
+
+
+# My Orders
+def my_orders(request):
+	orders=CartOrder.objects.filter(user=request.user).order_by('-id')
+	return render(request, 'user/orders.html',{'orders':orders})
+
+# Order Detail
+def my_order_items(request,id):
+	order=CartOrder.objects.get(pk=id)
+	orderitems=CartOrderItems.objects.filter(order=order).order_by('-id')
+	return render(request, 'user/order-items.html',{'orderitems':orderitems})
+
+
+# Wishlist
+def add_wishlist(request):
+	pid=request.GET['product']
+	product=Product.objects.get(pk=pid)
+	data={}
+	checkw=Wishlist.objects.filter(product=product,user=request.user).count()
+	if checkw > 0:
+		data={
+			'bool':False
+		}
+	else:
+		wishlist=Wishlist.objects.create(
+			product=product,
+			user=request.user
+		)
+		data={
+			'bool':True
+		}
+	return JsonResponse(data)
+
+# My Wishlist
+def my_wishlist(request):
+	wlist=Wishlist.objects.filter(user=request.user).order_by('-id')
+	return render(request, 'user/wishlist.html',{'wlist':wlist})
+
+# My Reviews
+def my_reviews(request):
+	reviews=ProductReview.objects.filter(user=request.user).order_by('-id')
+	return render(request, 'user/reviews.html',{'reviews':reviews})
+
+# My AddressBook
+def my_addressbook(request):
+	addbook=UserAddressBook.objects.filter(user=request.user).order_by('-id')
+	return render(request, 'user/addressbook.html',{'addbook':addbook})
+
+
+# Save addressbook
+def save_address(request):
+	msg=None
+	if request.method=='POST':
+		form=AddressBookForm(request.POST)
+		if form.is_valid():
+			saveForm=form.save(commit=False)
+			saveForm.user=request.user
+			if 'status' in request.POST:
+				UserAddressBook.objects.update(status=False)
+			saveForm.save()
+			msg='Data has been saved'
+	form=AddressBookForm
+	return render(request, 'user/add-address.html',{'form':form,'msg':msg})
+
+
+# Activate address
+def activate_address(request):
+	a_id=str(request.GET['id'])
+	UserAddressBook.objects.update(status=False)
+	UserAddressBook.objects.filter(id=a_id).update(status=True)
+	return JsonResponse({'bool':True})
+
+
+# Edit Profile
+def edit_profile(request):
+	msg=None
+	if request.method=='POST':
+		form=ProfileForm(request.POST,instance=request.user)
+		if form.is_valid():
+			form.save()
+			msg='Data has been saved'
+	form=ProfileForm(instance=request.user)
+	return render(request, 'user/edit-profile.html',{'form':form,'msg':msg})
+
+
+# Update addressbook
+def update_address(request,id):
+	address=UserAddressBook.objects.get(pk=id)
+	msg=None
+	if request.method=='POST':
+		form=AddressBookForm(request.POST,instance=address)
+		if form.is_valid():
+			saveForm=form.save(commit=False)
+			saveForm.user=request.user
+			if 'status' in request.POST:
+				UserAddressBook.objects.update(status=False)
+			saveForm.save()
+			msg='Data has been saved'
+	form=AddressBookForm(instance=address)
+	return render(request, 'user/update-address.html',{'form':form,'msg':msg})

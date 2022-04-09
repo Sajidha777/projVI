@@ -31,7 +31,7 @@ def brands_list(request):
 #Product-list
 def product_list(request):
     total_data=Product.objects.count()
-    data = Product.objects.all().order_by('-id')[:3]
+    data = Product.objects.all().order_by('-id')[:9]
     return render(request,'product_list.html',
     {
         'data':data,

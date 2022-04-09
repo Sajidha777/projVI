@@ -18,6 +18,6 @@
     {% if form.errors %}
 	<p><a href="{% url 'password_reset' %}" class="text-danger">Forgot Password?</a></p>
     {% endif %}
-	<p>If you are not registred, Please <a href="">Signup here</a>.</p>
+	<p>If you are not registred, Please <a href="{% url 'signup' %}">Signup here</a>.</p>
 </main>
 {% endblock %}

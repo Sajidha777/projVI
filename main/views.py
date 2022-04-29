@@ -227,13 +227,15 @@ def initial_checkout(request):
 def checkout(request):
 	total_amt=0
 	totalAmt=0
+	addressactive=UserAddressBook.objects.filter(user=request.user,status=True).first()
 	if 'cartdata' in request.session:
 		for p_id,item in request.session['cartdata'].items():
 			totalAmt+=int(item['qty'])*float(item['price'])
 		# Order
 		order=CartOrder.objects.create(
 				user=request.user,
-				total_amt=totalAmt
+				total_amt=totalAmt,
+				address=addressactive.mobile + ", \n" + addressactive.address + ", \n" + addressactive.pincode
 			)
 		# End
 		for p_id,item in request.session['cartdata'].items():
@@ -250,8 +252,7 @@ def checkout(request):
 				)
 			# End
 		
-		address=UserAddressBook.objects.filter(user=request.user,status=True).first()
-		return render(request, 'order-complete.html',{'cart_data':request.session['cartdata'],'totalitems':len(request.session['cartdata']),'total_amt':total_amt,'address':address})
+		return render(request, 'order-complete.html',{'cart_data':request.session['cartdata'],'totalitems':len(request.session['cartdata']),'total_amt':total_amt,'address':addressactive})
 
 
 

@@ -44,7 +44,7 @@ admin.site.register(CustomUser,CustomUserAdmin)
 #order
 class CartOrderAdmin(admin.ModelAdmin):
     list_editable=('paid_status','order_status','order_status')
-    list_display=('user','total_amt','paid_status','order_dt','order_status')
+    list_display=('id','user','total_amt','address','paid_status','order_dt','order_status')
 admin.site.register(CartOrder,CartOrderAdmin)
 
 class CartOrderItemsAdmin(admin.ModelAdmin):

@@ -126,6 +126,7 @@ status_choice=(
 class CartOrder(models.Model):
     user=models.ForeignKey(CustomUser,on_delete=models.CASCADE)
     total_amt=models.FloatField()
+    address=models.TextField(null=True)
     paid_status=models.BooleanField(default=False)
     order_dt=models.DateTimeField(auto_now_add=True)
     order_status=models.CharField(choices=status_choice,default='process',max_length=150)
